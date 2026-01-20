@@ -1,0 +1,11 @@
+google-api-core
+torch
+psutil
+faster-whisper
+yt-dlp
+Flask
+Flask-Cors
+pyngrok
+google-generativeai
+google-colab
+deep-translator
