@@ -37,6 +37,7 @@ This document outlines the tasks required to build the **Vid2Chat** assistant, f
 
 | Task | Description | Est. Hours |
 | :--- | :--- | :--- |
+| **Automation** | Testing performances of the web application with increasing capabilities | 4 |
 | **Hardware Optimization** | Test VRAM consumption on Colab to ensure the `base` model runs without crashing. | 2 |
 | **Edge Case Handling** | Logic to handle invalid URLs, very long videos, or network timeouts. | 3 |
 | **Optimization** | From testing we may find out small details we need to optimize. | 4 |
