@@ -3,11 +3,7 @@ import { sendChatMessage } from '../services/api';
 
 /**
  * Custom hook for managing chat functionality
- * Handles message state, sending, and auto-scrolling
- * 
- * @param {string} backendUrl - Backend API URL
- * @param {string} transcript - Video transcript for context
- * @param {string} videoName - Name of the video being discussed
+ * Handles message state, sending, auto-scrolling, and LocalStorage persistence
  */
 export function useChat(backendUrl, transcript, videoName) {
   // Chat state
@@ -17,6 +13,27 @@ export function useChat(backendUrl, transcript, videoName) {
 
   // Ref for auto-scrolling
   const messagesEndRef = useRef(null);
+
+  /**
+   * PERSISTENCE LOGIC: Load chat history from LocalStorage when videoName changes
+   */
+  useEffect(() => {
+    if (videoName) {
+      const savedChat = localStorage.getItem(`chat_history_${videoName}`);
+      if (savedChat) {
+        setMessages(JSON.parse(savedChat));
+      }
+    }
+  }, [videoName]);
+
+  /**
+   * PERSISTENCE LOGIC: Save chat history to LocalStorage whenever messages change
+   */
+  useEffect(() => {
+    if (videoName && messages.length > 0) {
+      localStorage.setItem(`chat_history_${videoName}`, JSON.stringify(messages));
+    }
+  }, [messages, videoName]);
 
   /**
    * Scroll to bottom of messages
@@ -34,33 +51,30 @@ export function useChat(backendUrl, transcript, videoName) {
 
   /**
    * Initialize chat with system message
-   * Called after video is processed
-   * 
-   * @param {string} name - Video name to display
+   * Fixed: Added fallback to prevent "undefined" when loading from cache
    */
   const initializeChat = (name) => {
+    // If messages already exist for this video (loaded from LocalStorage), don't overwrite them
+    if (messages.length > 0) return;
+
+    const displayName = name || videoName || "Video";
+    
     setMessages([{
       role: 'system',
-      content: `"${name}" has been processed. You can now chat about it!`,
+      content: `"${displayName}" has been processed. You can now chat about it!`,
       timestamp: new Date().toISOString(),
     }]);
   };
 
   /**
    * Send a chat message to the backend
-   * Maintains conversation history for context
    */
   const handleSendMessage = async () => {
-    // Validation
     if (!inputMessage.trim() || chatLoading) return;
     
     const userMessage = inputMessage.trim();
-    
-    // Capture current history BEFORE updating state
-    // This ensures backend receives the history without the new user message
     const currentHistory = [...messages];
     
-    // Optimistically add user message to UI
     const newUserMessage = {
       role: 'user',
       content: userMessage,
@@ -72,7 +86,6 @@ export function useChat(backendUrl, transcript, videoName) {
     setChatLoading(true);
 
     try {
-      // Call API with conversation context
       const data = await sendChatMessage(backendUrl, {
         message: userMessage,
         transcript,
@@ -80,7 +93,6 @@ export function useChat(backendUrl, transcript, videoName) {
         history: currentHistory,
       });
       
-      // Add assistant response
       const assistantMessage = {
         role: 'assistant',
         content: data.response,
@@ -89,7 +101,6 @@ export function useChat(backendUrl, transcript, videoName) {
       
       setMessages(prev => [...prev, assistantMessage]);
     } catch (err) {
-      // Add error message
       const errorMessage = {
         role: 'assistant',
         content: 'Chat Error. Please check your backend connection.',
@@ -107,11 +118,14 @@ export function useChat(backendUrl, transcript, videoName) {
    * Clear chat history but keep system message
    */
   const clearChat = () => {
-    setMessages([{
+    const clearedMessages = [{
       role: 'system',
       content: `Memory cleared. You can still chat about "${videoName}".`,
       timestamp: new Date().toISOString(),
-    }]);
+    }];
+    setMessages(clearedMessages);
+    // Also clear the specific LocalStorage for this video
+    localStorage.removeItem(`chat_history_${videoName}`);
   };
 
   /**
@@ -124,14 +138,11 @@ export function useChat(backendUrl, transcript, videoName) {
   };
 
   return {
-    // State
     messages,
     inputMessage,
     setInputMessage,
     chatLoading,
     messagesEndRef,
-
-    // Actions
     sendMessage: handleSendMessage,
     clearChat,
     initializeChat,

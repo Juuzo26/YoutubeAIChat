@@ -1,15 +1,15 @@
 import { useState } from 'react';
 import { processVideo } from '../services/api';
 
-/**
- * Custom hook for managing video processing state
- * Handles authentication, video URL input, and transcription
- */
+// Cache configuration constants
+const CACHE_KEY = 'yt_ai_chat_history';
+const MAX_HISTORY = 5;
+
 export function useVideoChat() {
   // Authentication state
   const [backendUrl, setBackendUrl] = useState(import.meta.env.VITE_BACKEND_URL || '');
   const [sessionCookie, setSessionCookie] = useState(import.meta.env.VITE_BACKEND_COOKIE || '');
-  const [showUrlInput, setShowUrlInput] = useState(false); // Change true to false
+  const [showUrlInput, setShowUrlInput] = useState(false);
 
   // Video processing state
   const [videoUrl, setVideoUrl] = useState('');
@@ -22,34 +22,75 @@ export function useVideoChat() {
   const [stage, setStage] = useState('idle'); // idle, processing, ready
 
   /**
-   * Process video: download and transcribe
-   * @returns {Promise<Object>} Video data with transcript and name
-   * @throws {Error} If processing fails
+   * Helper: Save result to LocalStorage with a 5-item limit
+   */
+  const saveToCache = (url, name, text) => {
+    try {
+      let history = JSON.parse(localStorage.getItem(CACHE_KEY) || '[]');
+      
+      // Remove existing entry for this URL to move it to the top (LRU)
+      history = history.filter(item => item.url !== url);
+      
+      // Add new entry to the front
+      history.unshift({ url, videoName: name, transcript: text, date: new Date().toISOString() });
+      
+      // Enforce the 5-instance limit
+      if (history.length > MAX_HISTORY) {
+        history = history.slice(0, MAX_HISTORY);
+      }
+      
+      localStorage.setItem(CACHE_KEY, JSON.stringify(history));
+    } catch (e) {
+      console.error("Failed to save to cache:", e);
+    }
+  };
+
+  /**
+   * Helper: Get result from LocalStorage
+   */
+  const getFromCache = (url) => {
+    const history = JSON.parse(localStorage.getItem(CACHE_KEY) || '[]');
+    return history.find(item => item.url === url);
+  };
+
+  /**
+   * Process video: checks cache first, then calls backend
    */
   const handleProcessVideo = async () => {
-    // Validation
     if (!videoUrl.trim()) {
       setError('Please enter a video URL');
       return;
     }
 
-    // Reset error and start processing
     setLoading(true);
     setError(null);
-    setStage('processing');
 
+    // --- STEP 1: CHECK CACHE ---
+    const cached = getFromCache(videoUrl);
+    if (cached) {
+      console.log("🚀 Cache hit! Loading persistent transcript.");
+      setVideoName(cached.videoName);
+      setTranscript(cached.transcript);
+      setStage('ready');
+      setLoading(false);
+      return cached;
+    }
+
+    // --- STEP 2: CALL BACKEND ---
+    setStage('processing');
     try {
-      // Call API service
       const data = await processVideo(backendUrl, videoUrl);
 
-      // Update state with results
+      // Update UI state
       setVideoName(data.video_name);
       setTranscript(data.transcript);
       setStage('ready');
 
+      // --- STEP 3: PERSIST TO CACHE ---
+      saveToCache(videoUrl, data.video_name, data.transcript);
+
       return data;
     } catch (err) {
-      // Handle errors
       setError(err.message);
       setStage('idle');
       throw err;
@@ -58,9 +99,6 @@ export function useVideoChat() {
     }
   };
 
-  /**
-   * Reset video processing state
-   */
   const resetVideo = () => {
     setVideoUrl('');
     setTranscript('');
@@ -70,26 +108,12 @@ export function useVideoChat() {
   };
 
   return {
-    // Authentication
-    backendUrl,
-    setBackendUrl,
-    sessionCookie,
-    setSessionCookie,
-    showUrlInput,
-    setShowUrlInput,
-
-    // Video processing
-    videoUrl,
-    setVideoUrl,
-    transcript,
-    videoName,
-
-    // UI state
-    loading,
-    error,
-    stage,
-
-    // Actions
+    backendUrl, setBackendUrl,
+    sessionCookie, setSessionCookie,
+    showUrlInput, setShowUrlInput,
+    videoUrl, setVideoUrl,
+    transcript, videoName,
+    loading, error, stage,
     processVideo: handleProcessVideo,
     resetVideo,
   };

@@ -17,13 +17,14 @@ export default function App() {
     videoState.videoName
   );
 
-  // Handler to process video and initialize chat
-  const handleProcessVideo = async () => {
+const handleProcessVideo = async () => {
     try {
       const data = await videoState.processVideo();
-      chatState.initializeChat(data.video_name);
+      
+      const finalName = data.video_name || data.videoName;
+      
+      chatState.initializeChat(finalName);
     } catch (err) {
-      // Error already handled in useVideoChat hook
       console.error('Video processing failed:', err);
     }
   };
