@@ -54,7 +54,7 @@ export const processVideo = async (backendUrl, videoUrl) => {
 };
 
 /**
- * Send a chat message with context (transcript + history)
+ * Send a chat message with context (transcript + history + reply_style)
  * 
  * @param {string} backendUrl - Backend API base URL
  * @param {Object} payload - Chat payload
@@ -62,13 +62,14 @@ export const processVideo = async (backendUrl, videoUrl) => {
  * @param {string} payload.transcript - Full video transcript
  * @param {string} payload.videoName - Video name for context
  * @param {Array} payload.history - Previous chat messages
+ * @param {string} payload.reply_style - AI reply persona/style
  * @returns {Promise<Object>} { response: string }
  * @throws {Error} If chat request fails
  */
 export const sendChatMessage = async (backendUrl, payload) => {
   const url = `${cleanUrl(backendUrl)}/chat`;
   
-  const { message, transcript, videoName, history } = payload;
+  const { message, transcript, videoName, history, reply_style } = payload;
   
   try {
     const response = await fetch(url, {
@@ -81,6 +82,7 @@ export const sendChatMessage = async (backendUrl, payload) => {
         transcript,
         video_name: videoName,
         history: history || [],
+        reply_style: reply_style || 'Helpful and concise', // ✅ NOW INCLUDED!
       }),
     });
 

@@ -1,103 +1,194 @@
-import React from 'react';
-import { useVideoChat } from './hooks/useVideoChat';
-import { useChat } from './hooks/useChat';
-import AuthPanel from './components/AuthPanel';
-import ConnectionStatus from './components/ConnectionStatus';
+import React, { useEffect, useRef } from 'react';
+import { useVideoContext } from './context/VideoContext';
+import { useChatContext } from './context/ChatContext';
+
+// Components
+import SettingsModal from './components/SettingsModal';
 import VideoInput from './components/VideoInput';
 import ProcessingIndicator from './components/ProcessingIndicator';
 import TranscriptPanel from './components/TranscriptPanel';
 import ChatPanel from './components/ChatPanel';
 
 export default function App() {
-  // Custom hooks for state management
-  const videoState = useVideoChat();
-  const chatState = useChat(
-    videoState.backendUrl, 
-    videoState.transcript, 
-    videoState.videoName
-  );
+  const mainContentRef = useRef(null);
+  
+  // Get state and actions from contexts
+  const {
+    backendUrl,
+    setBackendUrl,
+    sessionCookie,
+    setSessionCookie,
+    videoUrl,
+    setVideoUrl,
+    transcript,
+    videoName,
+    loading,
+    error,
+    stage,
+    processVideo,
+  } = useVideoContext();
 
-const handleProcessVideo = async () => {
-    try {
-      const data = await videoState.processVideo();
-      
-      const finalName = data.video_name || data.videoName;
-      
-      chatState.initializeChat(finalName);
-    } catch (err) {
-      console.error('Video processing failed:', err);
+  const {
+    messages,
+    inputMessage,
+    setInputMessage,
+    chatLoading,
+    messagesEndRef,
+    sendMessage,
+    clearChat,
+    initializeChat,
+    replyStyle,        
+    setReplyStyle,     
+  } = useChatContext();
+
+  useEffect(() => {
+    if (stage === 'ready' && videoName) {
+      initializeChat(videoName);
     }
+  }, [stage, videoName]);
+
+  // Check if authenticated
+  const isAuthenticated = backendUrl && sessionCookie;
+
+  // Handle connection from settings
+  const handleConnect = () => {
+    // Connection logic handled in context
+    console.log('Connected to backend');
+  };
+
+  // Skip link handler
+  const handleSkipToMain = (e) => {
+    e.preventDefault();
+    mainContentRef.current?.focus();
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <div className="container mx-auto px-4 py-4 sm:py-6 md:py-8 max-w-7xl">
-        {/* Header */}
-        <header className="text-center mb-6 sm:mb-8">
-          <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2 sm:mb-3 px-4">
-            Video to Chat AI
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 px-4">
-            Analyze and discuss video content with persistent memory
-          </p>
-        </header>
+    <>
+      {/* Skip Link - Accessibility Feature */}
+      <a
+        href="#main-content"
+        onClick={handleSkipToMain}
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-lg focus:shadow-lg transition-all"
+      >
+        Skip to main content
+      </a>
 
-        {/* Authentication Section */}
-        {videoState.showUrlInput ? (
-          <AuthPanel
-            backendUrl={videoState.backendUrl}
-            setBackendUrl={videoState.setBackendUrl}
-            sessionCookie={videoState.sessionCookie}
-            setSessionCookie={videoState.setSessionCookie}
-            onConnect={() => videoState.setShowUrlInput(false)}
-          />
-        ) : (
-          <ConnectionStatus
-            backendUrl={videoState.backendUrl}
-            onEdit={() => videoState.setShowUrlInput(true)}
-          />
-        )}
+      {/* Settings Button (Top Right - Hidden Auth) */}
+      <SettingsModal
+        backendUrl={backendUrl}
+        setBackendUrl={setBackendUrl}
+        sessionCookie={sessionCookie}
+        setSessionCookie={setSessionCookie}
+        onConnect={handleConnect}
+        isAuthenticated={isAuthenticated}
+      />
 
-        {/* Video Input Stage - Only show when authenticated and idle */}
-        {!videoState.showUrlInput && videoState.stage === 'idle' && (
-          <VideoInput
-            videoUrl={videoState.videoUrl}
-            setVideoUrl={videoState.setVideoUrl}
-            loading={videoState.loading}
-            error={videoState.error}
-            onProcess={handleProcessVideo}
-          />
-        )}
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50 py-4 sm:py-8 px-4">
+        <div className="max-w-7xl mx-auto">
+          {/* Header */}
+          <header className="text-center mb-6 sm:mb-8">
+            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent mb-2">
+              🎥 VidChat
+            </h1>
+            <p className="text-sm sm:text-base text-gray-600">
+              Transform YouTube videos into interactive chat experiences
+            </p>
+          </header>
 
-        {/* Processing Stage - Show loading indicator */}
-        {videoState.stage === 'processing' && <ProcessingIndicator />}
+          {/* Main Content Area */}
+          <main 
+            id="main-content" 
+            ref={mainContentRef}
+            tabIndex={-1}
+            className="outline-none"
+            aria-label="Main content"
+          >
+            {/* Authentication Required Message (only if not authenticated) */}
+            {!isAuthenticated && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6 mb-6 text-center">
+                <p className="text-amber-800 text-sm sm:text-base">
+                  ⚙️ Please configure backend connection in{' '}
+                  <span className="font-semibold">Settings</span> (top-right corner)
+                </p>
+              </div>
+            )}
 
-        {/* Chat & Transcript Stage - Main interface */}
-        {videoState.stage === 'ready' && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 animate-in fade-in zoom-in duration-300">
-            {/* Transcript Panel - Left side on desktop, below chat on mobile */}
-            <div className="lg:col-span-1 order-2 lg:order-1">
-              <TranscriptPanel
-                videoName={videoState.videoName}
-                transcript={videoState.transcript}
-              />
-            </div>
+            {/* Main Content (only if authenticated) */}
+            {isAuthenticated && (
+              <>
+                {/* Video Input (idle stage) */}
+                {stage === 'idle' && (
+                  <section aria-labelledby="video-input-heading">
+                    <h2 id="video-input-heading" className="sr-only">
+                      Video Input
+                    </h2>
+                    <VideoInput
+                      videoUrl={videoUrl}
+                      setVideoUrl={setVideoUrl}
+                      loading={loading}
+                      error={error}
+                      onProcess={processVideo}
+                    />
+                  </section>
+                )}
 
-            {/* Chat Panel - Right side on desktop, top on mobile */}
-            <div className="lg:col-span-2 order-1 lg:order-2">
-              <ChatPanel
-                messages={chatState.messages}
-                inputMessage={chatState.inputMessage}
-                setInputMessage={chatState.setInputMessage}
-                chatLoading={chatState.chatLoading}
-                messagesEndRef={chatState.messagesEndRef}
-                onSendMessage={chatState.sendMessage}
-                onClearChat={chatState.clearChat}
-              />
-            </div>
-          </div>
-        )}
+                {/* Processing Indicator */}
+                {stage === 'processing' && (
+                  <section 
+                    aria-live="polite" 
+                    aria-label="Processing video"
+                  >
+                    <ProcessingIndicator />
+                  </section>
+                )}
+
+                {/* Transcript + Chat (ready stage) */}
+                {stage === 'ready' && (
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                    {/* Transcript Panel */}
+                    <section aria-labelledby="transcript-heading">
+                      <h2 id="transcript-heading" className="sr-only">
+                        Video Transcript
+                      </h2>
+                      <TranscriptPanel
+                        videoName={videoName}
+                        transcript={transcript}
+                      />
+                    </section>
+
+                    {/* Chat Panel */}
+                    <section aria-labelledby="chat-heading">
+                      <h2 id="chat-heading" className="sr-only">
+                        Chat Interface
+                      </h2>
+                      <ChatPanel
+                        messages={messages}
+                        inputMessage={inputMessage}
+                        setInputMessage={setInputMessage}
+                        chatLoading={chatLoading}
+                        messagesEndRef={messagesEndRef}
+                        onSendMessage={sendMessage}
+                        onClearChat={clearChat}
+                        replyStyle={replyStyle}         // ✅ PASS THIS
+                        setReplyStyle={setReplyStyle}   // ✅ PASS THIS
+                      />
+                    </section>
+                  </div>
+                )}
+              </>
+            )}
+          </main>
+
+          {/* Footer */}
+          <footer className="text-center mt-8 sm:mt-12 text-xs sm:text-sm text-gray-500">
+            <p>
+              Powered by{' '}
+              <span className="font-semibold text-indigo-600">OpenAI Whisper</span>
+              {' '}& <span className="font-semibold text-purple-600">Claude AI</span>
+            </p>
+          </footer>
+        </div>
       </div>
-    </div>
+    </>
   );
 }
