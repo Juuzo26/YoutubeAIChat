@@ -16,7 +16,6 @@ export default function ChatPanel({
   const [showStyleInput, setShowStyleInput] = useState(false);
   const [savedStyles, setSavedStyles] = useState([]);
   
-  // Load the Persona Library from local storage on mount
   useEffect(() => {
     const library = localStorage.getItem('ai_style_library');
     if (library) {
@@ -30,20 +29,13 @@ export default function ChatPanel({
 
   const isDefault = !replyStyle || replyStyle === 'Helpful and concise';
 
-  // ✅ FIX: More permissive save logic
   const canSaveStyle = () => {
     const trimmed = replyStyle?.trim() || '';
-    // Can save if:
-    // 1. Not empty
-    // 2. Not the default
-    // 3. Not already saved
-    // 4. At least 2 characters (prevents accidental saves)
     return trimmed.length >= 2 && 
            trimmed !== 'Helpful and concise' && 
            !savedStyles.includes(trimmed);
   };
 
-  // Logic to save a new persona to the library
   const handleSaveStyle = () => {
     const trimmed = replyStyle?.trim() || '';
     if (!canSaveStyle()) return;
@@ -53,9 +45,8 @@ export default function ChatPanel({
     localStorage.setItem('ai_style_library', JSON.stringify(newLibrary));
   };
 
-  // Logic to remove a persona from the library
   const removeSavedStyle = (e, styleToRemove) => {
-    e.stopPropagation(); // Don't trigger the selection click
+    e.stopPropagation();
     const newLibrary = savedStyles.filter(s => s !== styleToRemove);
     setSavedStyles(newLibrary);
     localStorage.setItem('ai_style_library', JSON.stringify(newLibrary));
@@ -73,11 +64,14 @@ export default function ChatPanel({
       {/* Header */}
       <div className="p-3 sm:p-4 border-b bg-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <MessageSquare className="text-indigo-600 flex-shrink-0" size={18} />
+          <MessageSquare className="text-indigo-600 flex-shrink-0" size={18} aria-hidden="true" />
           <h3 className="font-bold text-sm sm:text-base text-gray-800">Chat with Memory</h3>
           {!isDefault && (
-            <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold animate-pulse">
-              <CheckCircle2 size={10} /> {replyStyle.toUpperCase()} ACTIVE
+            <span 
+              role="status" 
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-[10px] font-bold animate-pulse"
+            >
+              <CheckCircle2 size={10} aria-hidden="true" /> {replyStyle.toUpperCase()} ACTIVE
             </span>
           )}
         </div>
@@ -87,11 +81,19 @@ export default function ChatPanel({
             onClick={() => setShowStyleInput(!showStyleInput)}
             className={`p-1.5 rounded-lg transition-all ${showStyleInput ? 'bg-indigo-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-200'}`}
             title="Persona Library"
+            aria-label="Toggle Persona Library Settings"
+            aria-expanded={showStyleInput}
           >
-            <Settings2 size={18} />
+            <Settings2 size={18} aria-hidden="true" />
           </button>
-          <button onClick={onClearChat} className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg">
-            <Trash2 size={16} />
+          
+          {/* FIX 1: Added aria-label to Clear Chat button */}
+          <button 
+            onClick={onClearChat} 
+            className="text-gray-400 hover:text-red-500 p-1.5 hover:bg-red-50 rounded-lg"
+            aria-label="Clear all messages"
+          >
+            <Trash2 size={16} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -100,10 +102,16 @@ export default function ChatPanel({
       {showStyleInput && (
         <div className={`border-b p-3 animate-in slide-in-from-top duration-200 ${isDefault ? 'bg-indigo-50/80' : 'bg-green-50'}`}>
           <div className="flex items-center justify-between mb-2">
-            <label className={`text-[10px] font-bold uppercase tracking-wider ${isDefault ? 'text-indigo-600' : 'text-green-700'}`}>
+            <label id="library-label" className={`text-[10px] font-bold uppercase tracking-wider ${isDefault ? 'text-indigo-600' : 'text-green-700'}`}>
               Persona Library
             </label>
-            <button onClick={() => setShowStyleInput(false)} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+            <button 
+              onClick={() => setShowStyleInput(false)} 
+              className="text-gray-400 hover:text-gray-600"
+              aria-label="Close library"
+            >
+              <X size={14} aria-hidden="true" />
+            </button>
           </div>
 
           <div className="flex gap-2 mb-3">
@@ -112,6 +120,7 @@ export default function ChatPanel({
               value={replyStyle}
               onChange={(e) => setReplyStyle(e.target.value)}
               placeholder="e.g. Angry Mother, Pirate..."
+              aria-labelledby="library-label"
               className="flex-1 bg-white border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:ring-2 focus:ring-indigo-400 outline-none"
             />
             <button 
@@ -119,32 +128,36 @@ export default function ChatPanel({
               disabled={!canSaveStyle()}
               className="p-1.5 bg-indigo-600 text-white rounded-lg disabled:opacity-30 disabled:cursor-not-allowed hover:bg-indigo-700 transition-colors"
               title={!canSaveStyle() ? "Type at least 2 characters to save" : "Save to library"}
+              aria-label="Save persona to library"
             >
-              <Save size={16} />
+              <Save size={16} aria-hidden="true" />
             </button>
           </div>
 
-          <div className="space-y-1 max-h-32 overflow-y-auto">
+          <div className="space-y-1 max-h-32 overflow-y-auto" role="list" aria-label="Saved personas">
             <button 
               onClick={() => setReplyStyle('Helpful and concise')}
               className={`w-full text-left px-2 py-1.5 rounded-md text-xs flex items-center justify-between group ${isDefault ? 'bg-indigo-100 text-indigo-700 font-bold' : 'hover:bg-white/50 text-gray-600'}`}
+              aria-current={isDefault ? 'true' : 'false'}
             >
-              <span className="flex items-center gap-2"><History size={12}/> Default (Helpful & Concise)</span>
+              <span className="flex items-center gap-2"><History size={12} aria-hidden="true"/> Default (Helpful & Concise)</span>
             </button>
             
             {savedStyles.map((style, idx) => (
-              <div key={idx} className="group flex items-center gap-1">
+              <div key={idx} className="group flex items-center gap-1" role="listitem">
                 <button 
                   onClick={() => setReplyStyle(style)}
                   className={`flex-1 text-left px-2 py-1.5 rounded-md text-xs flex items-center gap-2 ${replyStyle === style ? 'bg-green-100 text-green-700 font-bold' : 'hover:bg-white/50 text-gray-600'}`}
+                  aria-current={replyStyle === style ? 'true' : 'false'}
                 >
-                  <Bookmark size={12} className={replyStyle === style ? 'fill-green-700' : ''}/> {style}
+                  <Bookmark size={12} className={replyStyle === style ? 'fill-green-700' : ''} aria-hidden="true"/> {style}
                 </button>
                 <button 
                   onClick={(e) => removeSavedStyle(e, style)}
                   className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-red-500 transition-all"
+                  aria-label={`Remove ${style} from library`}
                 >
-                  <X size={12} />
+                  <X size={12} aria-hidden="true" />
                 </button>
               </div>
             ))}
@@ -153,7 +166,7 @@ export default function ChatPanel({
       )}
       
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/30" aria-live="polite">
         {messages.length === 0 ? (
           <div className="flex items-center justify-center h-full text-gray-400 text-sm">No messages yet.</div>
         ) : (
@@ -161,8 +174,8 @@ export default function ChatPanel({
         )}
         {chatLoading && (
           <div className="flex justify-start">
-            <div className="bg-white border rounded-2xl p-3 shadow-sm">
-              <Loader2 className="animate-spin text-indigo-600" size={20} />
+            <div className="bg-white border rounded-2xl p-3 shadow-sm" aria-label="AI is typing">
+              <Loader2 className="animate-spin text-indigo-600" size={20} aria-hidden="true" />
             </div>
           </div>
         )}
@@ -179,10 +192,17 @@ export default function ChatPanel({
               onChange={(e) => setInputMessage(e.target.value)}
               onKeyDown={handleKeyPress}
               placeholder={isDefault ? "Ask about the video..." : `Persona: ${replyStyle}`}
+              aria-label="Message text"
               className="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none"
             />
-            <button type="submit" disabled={!inputMessage.trim() || chatLoading} className="px-5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:bg-gray-300">
-              <Send size={18} />
+            {/* FIX 2: Added aria-label to Send button */}
+            <button 
+              type="submit" 
+              disabled={!inputMessage.trim() || chatLoading} 
+              className="px-5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:bg-gray-300"
+              aria-label="Send message"
+            >
+              <Send size={18} aria-hidden="true" />
             </button>
           </div>
         </form>

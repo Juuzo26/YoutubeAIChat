@@ -4,6 +4,11 @@ import { FileText, Copy, Check } from 'lucide-react';
 export default function TranscriptPanel({ videoName, transcript }) {
   const [copied, setCopied] = useState(false);
 
+  // // Test Error Boundaries
+  // if (transcript && transcript.length > 0) {
+  //     throw new Error("Testing Error Boundary Graceful Degradation!");
+  //   } 
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(transcript);
@@ -14,18 +19,17 @@ export default function TranscriptPanel({ videoName, transcript }) {
     }
   };
 
-  // Backend sends pre-formatted paragraphs with \n\n separators
   const formattedTranscript = useMemo(() => {
     if (!transcript) return [];
     
-    // Split by double newlines (backend provides this)
+    // Split by double line breaks
     const paragraphs = transcript
       .split(/\n\n+/)
       .map(p => p.trim())
       .filter(p => p.length > 0);
     
-    // Fallback: If no paragraphs, split manually
-    if (paragraphs.length === 1 && paragraphs[0].length > 500) {
+    // Fallback: If no double-newlines, split by sentences into chunks of 4
+    if (paragraphs.length === 1) {
       const sentences = paragraphs[0].match(/[^.!?]+[.!?]+/g) || [paragraphs[0]];
       const chunks = [];
       let currentChunk = '';
@@ -44,14 +48,14 @@ export default function TranscriptPanel({ videoName, transcript }) {
     return paragraphs;
   }, [transcript]);
 
-  const wordCount = transcript.split(' ').length;
-  const readingTime = Math.ceil(wordCount / 200); // 200 words per minute
+  // ✅ IMPROVED: Word count now uses regex to be more accurate
+  const wordCount = transcript ? transcript.split(/\s+/).filter(Boolean).length : 0;
+  const readingTime = Math.ceil(wordCount / 200);
 
   return (
-    <div 
+    <section 
       className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 border border-gray-100 flex flex-col h-[400px] sm:h-[500px] lg:h-[600px]"
-      role="region"
-      aria-label="Video transcript"
+      aria-labelledby="unique-transcript-title"
     >
       {/* Header */}
       <div className="flex items-center justify-between mb-3 sm:mb-4 pb-3 border-b">
@@ -61,7 +65,9 @@ export default function TranscriptPanel({ videoName, transcript }) {
             size={18}
             aria-hidden="true"
           />
-          <h3 className="font-bold text-sm sm:text-base">Transcript</h3>
+          <h3 id="unique-transcript-title" className="font-bold text-sm sm:text-base text-gray-900">
+            Video Transcript Content
+          </h3>
         </div>
         <button 
           onClick={handleCopy}
@@ -69,34 +75,20 @@ export default function TranscriptPanel({ videoName, transcript }) {
           aria-label={copied ? "Transcript copied" : "Copy transcript to clipboard"}
         >
           {copied ? (
-            <>
-              <Check 
-                size={18} 
-                className="text-green-600"
-                aria-hidden="true"
-              />
-              <span className="sr-only">Copied!</span>
-            </>
+            <Check size={18} className="text-green-600" aria-hidden="true" />
           ) : (
-            <>
-              <Copy 
-                size={18} 
-                className="text-gray-600 group-hover:text-indigo-600"
-                aria-hidden="true"
-              />
-              <span className="sr-only">Copy</span>
-            </>
+            <Copy size={18} className="text-gray-600 group-hover:text-indigo-600" aria-hidden="true" />
           )}
         </button>
       </div>
 
-      {/* Scrollable Content */}
+      {/* Scrollable Content - ✅ ACCESSIBILITY: Added tabIndex and Focus Ring */}
       <div 
-        className="flex-1 overflow-y-auto pr-2 space-y-4"
-        role="article"
-        aria-label="Transcript content"
+        className="flex-1 overflow-y-auto pr-2 space-y-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 rounded-lg"
+        tabIndex={0}
+        role="region"
+        aria-label="Transcript text scroll area"
       >
-        {/* Video Name */}
         <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-3 border border-indigo-100">
           <p className="text-xs sm:text-sm font-semibold text-gray-800 leading-relaxed">
             <span className="sr-only">Video title: </span>
@@ -106,13 +98,12 @@ export default function TranscriptPanel({ videoName, transcript }) {
 
         <div className="h-px bg-gray-100" role="separator" aria-hidden="true" />
 
-        {/* Formatted Transcript - Now with paragraphs */}
         <div className="space-y-4">
-          <span className="sr-only">Transcript: </span>
+          <span className="sr-only">Transcript content:</span>
           {formattedTranscript.map((paragraph, idx) => (
             <p 
-              key={idx}
-              className="text-sm sm:text-base text-gray-700 leading-relaxed text-justify"
+              key={idx} 
+              className="text-sm sm:text-base text-gray-800 leading-relaxed text-justify"
             >
               {paragraph}
             </p>
@@ -120,16 +111,16 @@ export default function TranscriptPanel({ videoName, transcript }) {
         </div>
       </div>
 
-      {/* Footer Info */}
+      {/* Footer Info - ✅ ACCESSIBILITY: Increased contrast to text-gray-600 */}
       <div 
-        className="mt-3 pt-3 border-t flex items-center justify-between text-xs text-gray-400"
+        className="mt-3 pt-3 border-t flex items-center justify-between text-xs font-medium text-gray-600"
         role="status"
         aria-label={`Transcript contains ${wordCount} words, ${readingTime} min read`}
       >
         <span>{wordCount} words</span>
-        <span>•</span>
+        <span aria-hidden="true">•</span>
         <span>{readingTime} min read</span>
       </div>
-    </div>
+    </section>
   );
 }

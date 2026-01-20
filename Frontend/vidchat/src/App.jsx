@@ -8,6 +8,7 @@ import VideoInput from './components/VideoInput';
 import ProcessingIndicator from './components/ProcessingIndicator';
 import TranscriptPanel from './components/TranscriptPanel';
 import ChatPanel from './components/ChatPanel';
+import ErrorBoundary from './components/ErrorBoundary'; // ✅ Import the boundary
 
 export default function App() {
   const mainContentRef = useRef(null);
@@ -52,7 +53,6 @@ export default function App() {
 
   // Handle connection from settings
   const handleConnect = () => {
-    // Connection logic handled in context
     console.log('Connected to backend');
   };
 
@@ -73,7 +73,6 @@ export default function App() {
         Skip to main content
       </a>
 
-      {/* Settings Button (Top Right - Hidden Auth) */}
       <SettingsModal
         backendUrl={backendUrl}
         setBackendUrl={setBackendUrl}
@@ -103,7 +102,6 @@ export default function App() {
             className="outline-none"
             aria-label="Main content"
           >
-            {/* Authentication Required Message (only if not authenticated) */}
             {!isAuthenticated && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 sm:p-6 mb-6 text-center">
                 <p className="text-amber-800 text-sm sm:text-base">
@@ -113,73 +111,80 @@ export default function App() {
               </div>
             )}
 
-            {/* Main Content (only if authenticated) */}
             {isAuthenticated && (
               <>
-                {/* Video Input (idle stage) */}
+                {/* Video Input Stage */}
                 {stage === 'idle' && (
-                  <section aria-labelledby="video-input-heading">
-                    <h2 id="video-input-heading" className="sr-only">
-                      Video Input
-                    </h2>
-                    <VideoInput
-                      videoUrl={videoUrl}
-                      setVideoUrl={setVideoUrl}
-                      loading={loading}
-                      error={error}
-                      onProcess={processVideo}
-                    />
-                  </section>
+                  <ErrorBoundary>
+                    <section aria-labelledby="video-input-heading">
+                      <h2 id="video-input-heading" className="sr-only">
+                        Video Input
+                      </h2>
+                      <VideoInput
+                        videoUrl={videoUrl}
+                        setVideoUrl={setVideoUrl}
+                        loading={loading}
+                        error={error}
+                        onProcess={processVideo}
+                      />
+                    </section>
+                  </ErrorBoundary>
                 )}
 
-                {/* Processing Indicator */}
+                {/* Processing Stage */}
                 {stage === 'processing' && (
-                  <section 
-                    aria-live="polite" 
-                    aria-label="Processing video"
-                  >
-                    <ProcessingIndicator />
-                  </section>
+                  <ErrorBoundary>
+                    <section 
+                      aria-live="polite" 
+                      aria-label="Processing video"
+                    >
+                      <ProcessingIndicator />
+                    </section>
+                  </ErrorBoundary>
                 )}
 
-                {/* Transcript + Chat (ready stage) */}
+                {/* Ready Stage - Transcript + Chat */}
                 {stage === 'ready' && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-                    {/* Transcript Panel */}
-                    <section aria-labelledby="transcript-heading">
-                      <h2 id="transcript-heading" className="sr-only">
-                        Video Transcript
-                      </h2>
-                      <TranscriptPanel
-                        videoName={videoName}
-                        transcript={transcript}
-                      />
-                    </section>
+                    
+                    {/* Transcript Panel with its own Boundary */}
+                    <ErrorBoundary>
+                      <section aria-labelledby="transcript-heading">
+                        <h2 id="transcript-heading" className="sr-only">
+                          Video Transcript
+                        </h2>
+                        <TranscriptPanel
+                          videoName={videoName}
+                          transcript={transcript}
+                        />
+                      </section>
+                    </ErrorBoundary>
 
-                    {/* Chat Panel */}
-                    <section aria-labelledby="chat-heading">
-                      <h2 id="chat-heading" className="sr-only">
-                        Chat Interface
-                      </h2>
-                      <ChatPanel
-                        messages={messages}
-                        inputMessage={inputMessage}
-                        setInputMessage={setInputMessage}
-                        chatLoading={chatLoading}
-                        messagesEndRef={messagesEndRef}
-                        onSendMessage={sendMessage}
-                        onClearChat={clearChat}
-                        replyStyle={replyStyle}         // ✅ PASS THIS
-                        setReplyStyle={setReplyStyle}   // ✅ PASS THIS
-                      />
-                    </section>
+                    {/* Chat Panel with its own Boundary */}
+                    <ErrorBoundary>
+                      <section aria-labelledby="chat-heading">
+                        <h2 id="chat-heading" className="sr-only">
+                          Chat Interface
+                        </h2>
+                        <ChatPanel
+                          messages={messages}
+                          inputMessage={inputMessage}
+                          setInputMessage={setInputMessage}
+                          chatLoading={chatLoading}
+                          messagesEndRef={messagesEndRef}
+                          onSendMessage={sendMessage}
+                          onClearChat={clearChat}
+                          replyStyle={replyStyle}
+                          setReplyStyle={setReplyStyle}
+                        />
+                      </section>
+                    </ErrorBoundary>
                   </div>
                 )}
               </>
             )}
           </main>
 
-          {/* Footer */}
           <footer className="text-center mt-8 sm:mt-12 text-xs sm:text-sm text-gray-500">
             <p>
               Powered by{' '}
