@@ -1,3 +1,4 @@
+from google.api_core import exceptions
 import os
 import torch
 import tempfile
@@ -241,19 +242,48 @@ def chat():
     context_transcript = data.get("transcript")
     history = data.get("history", [])
 
+    # Formatting the prompt for context-aware chat
     memory_block = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in history])
     full_prompt = (
-        f"SYSTEM: Use the transcript to answer. Memory included.\n"
+        f"SYSTEM: Use the transcript to answer accurately. Use memory for context.\n"
         f"TRANSCRIPT:\n{context_transcript}\n\n"
         f"MEMORY:\n{memory_block}\n\n"
         f"USER: {user_message}\n"
     )
 
-    try:
-        response = client.models.generate_content(model='gemini-2.5-flash-lite', contents=full_prompt)
-        return jsonify({"response": response.text})
-    except Exception as e:
-        return jsonify({"error": "AI error"}), 500
+    # Ordered list of models to try (Fallback Chain)
+    #gemini-2.5-flash-lite is often best for speed/cost balance in 2026
+    model_priority = [
+        'gemini-2.5-flash-lite',
+        'gemini-3-flash',
+        'gemini-2.5-flash'
+    ]
+
+    for model_name in model_priority:
+        try:
+            logger.info(f"Attempting chat with model: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=full_prompt
+            )
+
+            # If successful, return immediately
+            return jsonify({
+                "response": response.text,
+                "model_used": model_name
+            })
+
+        except exceptions.ResourceExhausted:
+            logger.warning(f"⚠️ Model {model_name} quota exhausted. Trying next fallback...")
+            continue
+        except Exception as e:
+            logger.error(f"❌ Error with {model_name}: {str(e)}")
+            continue
+
+    return jsonify({
+        "error": "All models exhausted or unavailable. Please try again in a minute.",
+        "status": "out_of_tokens"
+    }), 429
 
 if __name__ == '__main__':
     load_all_models()
