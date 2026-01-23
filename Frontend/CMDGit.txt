@@ -1,5 +1,0 @@
-git add .
-git commit -m "Your commit message for frontend changes"
-git stash
-git pull --rebase origin main
-git push origin main
