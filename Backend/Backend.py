@@ -10,21 +10,23 @@ import time
 import gc
 import glob
 import re
+from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 import yt_dlp
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from pyngrok import ngrok
 from google import genai
-from google.colab import userdata
-from deep_translator import GoogleTranslator
+
+load_dotenv()
 
 # --- 1. Configuration & Utilities ---
 MAX_CONCURRENT_TASKS = 8
 gpu_semaphore = threading.Semaphore(MAX_CONCURRENT_TASKS)
 
 logging.basicConfig(
-    level=logging.INFO,
+    level= os.getenv('LoggingLevel'),
+    # level= logging.WARNING,
     format='%(asctime)s [%(levelname)s] (Thread-%(thread)d) %(message)s',
     datefmt='%H:%M:%S',
     force=True
@@ -154,7 +156,7 @@ def load_all_models():
     except Exception as e: print(f"❌ Whisper Load Error: {e}")
 
     try:
-        api_key = userdata.get('MY_GEMINI_API_KEY')
+        api_key = os.getenv('GOOGLE_API_KEY')
         client = genai.Client(api_key=api_key)
         print("✅ Gemini AI Client Initialized")
     except Exception as e: print(f"❌ Gemini Error: {e}")
@@ -181,6 +183,53 @@ def get_video_info(url):
 
 # --- 4. API Routes ---
 
+# --- NEW: AI TRANSCRIPT POLISHING FUNCTION ---
+def llm_fix_transcript(raw_text):
+    """
+    Job 1: Format in MD (paragraphs).
+    Job 2: Fix Punctuation/Capitals only (No typo fixing).
+    """
+    if not raw_text or len(raw_text.strip()) < 10:
+        return raw_text
+
+    # Strict prompt to stop the "Here is the transcript..." chatter
+    format_prompt = (
+        "TASK: Reformat the raw text below into a clean, readable transcript.\n"
+        "JOB 1: Format using Markdown. Break the text into logical paragraphs.\n"
+        "JOB 2: Ensure every sentence starts with a Capital letter and ends with appropriate punctuation (. , ! or ?).\n"
+        "JOB 3: Decide when to go to the next line if a sentence ended. Cap the first word of new lines.\n"
+
+        "--- CRITICAL OUTPUT RULES ---\n"
+        "1. DO NOT include any introductory or concluding text (e.g., 'Here is the transcript...').\n"
+        "2. DO NOT fix typos or change speaker's words.\n"
+        "3. START the output immediately with the first word of the transcript.\n"
+        "4. Output ONLY the processed transcript and nothing else.\n"
+
+        f"\nRAW TEXT:\n{raw_text}"
+    )
+
+    model_priority = ['gemini-2.5-flash-lite', 'gemini-3-flash-preview', 'gemini-2.5-flash']
+
+    for model_name in model_priority:
+        try:
+            logger.info(f"✨ Formatting transcript with: {model_name}")
+            response = client.models.generate_content(
+                model=model_name,
+                contents=format_prompt
+            )
+
+            # Additional safety: strip any accidental intro lines if they still appear
+            clean_output = response.text.strip()
+            # This regex removes common "Here is..." prefix lines if the AI ignores the prompt
+            clean_output = re.sub(r"^(Here is|Below is|Reformatted transcript).*?:\s*", "", clean_output, flags=re.IGNORECASE)
+
+            return clean_output
+        except Exception as e:
+            logger.warning(f"⚠️ Formatting failed with {model_name}: {e}")
+            continue
+
+    return raw_text
+
 @app.route('/process_full_video', methods=['POST'])
 def process_full_video():
     if not is_system_safe():
@@ -193,9 +242,27 @@ def process_full_video():
     if not url or ("youtube.com" not in url and "youtu.be" not in url):
         return jsonify({"error": "Invalid YouTube URL"}), 400
 
-    # NEW LOGIC: TRY FAST SCRAPE FIRST
+    # --- NEW: Clean URL to remove list/playlist parameters ---
+    # This regex looks for the video ID and ignores everything starting with &list or &index
+    if "youtube.com/watch" in url:
+        # Match up to the end of the 'v' parameter value, stop before any '&'
+        match = re.search(r"(https?://www\.youtube\.com/watch\?v=[^&\s]+)", url)
+        if match:
+            url = match.group(1)
+    elif "youtu.be/" in url:
+        # For short links, match up to the first '?' (where lists usually start)
+        match = re.search(r"(https?://youtu\.be/[^?\s]+)", url)
+        if match:
+            url = match.group(1)
+    
+    logger.info(f"Processing cleaned URL: {url}")
+
+    # 1. TRY FAST SCRAPE
     scraped_text, scraped_title = try_fast_transcript(url)
     if scraped_text:
+        # FIX TRANSCRIPT BEFORE RETURNING
+        scraped_text = llm_fix_transcript(scraped_text)
+
         total_dur = time.time() - req_start
         logger.info(f"🚀 FAST SCRAPE SUCCESS: {scraped_title} in {total_dur:.1f}s")
         return jsonify({
@@ -204,7 +271,7 @@ def process_full_video():
             "stats": {"duration": "Unknown (Scraped)", "proc_time": round(total_dur, 2)}
         })
 
-    # FALLBACK TO WHISPER (Original Optimized Logic)
+    # 2. FALLBACK TO WHISPER
     logger.info("⚠️ No transcript found on YouTube. Falling back to Whisper AI...")
     with gpu_semaphore:
         tmpdir = None
@@ -220,12 +287,16 @@ def process_full_video():
                 condition_on_previous_text=False
             )
 
-            transcript = " ".join([segment.text for segment in segments]).strip()
+            raw_transcript = " ".join([segment.text for segment in segments]).strip()
+
+            # FIX TRANSCRIPT BEFORE RETURNING
+            clean_transcript = llm_fix_transcript(raw_transcript)
+
             total_dur = time.time() - req_start
 
             return jsonify({
                 "video_name": title,
-                "transcript": transcript,
+                "transcript": clean_transcript,
                 "stats": {"duration": info.get('duration'), "proc_time": round(total_dur, 2)}
             })
         except Exception as e:
@@ -238,56 +309,72 @@ def process_full_video():
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.get_json()
+    if not data or not data.get('message'):
+      # This is what triggers the 400 error the test expects
+      return jsonify({"error": "Message is required"}), 400
     user_message = data.get("message")
     context_transcript = data.get("transcript")
     history = data.get("history", [])
 
-    # Formatting the prompt for context-aware chat
+    # Take the style directly from the frontend.
+    # If for some reason it's missing, we provide a generic instruction.
+    reply_style = data.get("reply_style", "a helpful and accurate AI assistant")
+
+    # Format history for the AI's memory
     memory_block = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in history])
+
+    # ENHANCED SYSTEM PROMPT:
+    # We use "ACT AS" and "CRITICAL RULES" to ensure the style overrides the model's default behavior.
     full_prompt = (
-        f"SYSTEM: Use the transcript to answer accurately. Use memory for context.\n"
-        f"TRANSCRIPT:\n{context_transcript}\n\n"
-        f"MEMORY:\n{memory_block}\n\n"
+        f"--- SYSTEM INSTRUCTIONS ---\n"
+        f"1. Use the provided TRANSCRIPT to answer accurately.\n"
+        f"2. Use MEMORY for conversation context.\n"
+        f"3. ACT AS: {reply_style}\n"
+        f"4. CRITICAL RULE: You MUST strictly maintain this persona/style in every sentence of your response.\n\n"
+        f"--- TRANSCRIPT ---\n{context_transcript}\n\n"
+        f"--- MEMORY ---\n{memory_block}\n\n"
         f"USER: {user_message}\n"
     )
 
-    # Ordered list of models to try (Fallback Chain)
-    #gemini-2.5-flash-lite is often best for speed/cost balance in 2026
+    # Fallback Chain (same as before)
     model_priority = [
         'gemini-2.5-flash-lite',
-        'gemini-3-flash',
+        'gemini-3-flash-preview',
         'gemini-2.5-flash'
     ]
 
     for model_name in model_priority:
         try:
-            logger.info(f"Attempting chat with model: {model_name}")
+            logger.info(f"Attempting chat with model: {model_name} using style: {reply_style}")
             response = client.models.generate_content(
                 model=model_name,
                 contents=full_prompt
             )
 
-            # If successful, return immediately
             return jsonify({
                 "response": response.text,
                 "model_used": model_name
             })
 
         except exceptions.ResourceExhausted:
-            logger.warning(f"⚠️ Model {model_name} quota exhausted. Trying next fallback...")
+            logger.warning(f"⚠️ {model_name} quota exhausted. Trying next fallback...")
             continue
         except Exception as e:
             logger.error(f"❌ Error with {model_name}: {str(e)}")
             continue
 
     return jsonify({
-        "error": "All models exhausted or unavailable. Please try again in a minute.",
+        "error": "All models exhausted. Please try again later.",
         "status": "out_of_tokens"
     }), 429
 
+@app.route('/health', methods=['GET'])
+def health_check():
+    return {"status": "healthy", "uptime": "ok"}, 200
+
 if __name__ == '__main__':
     load_all_models()
-    NGROK_AUTH_TOKEN = userdata.get('NGROK_AUTH_TOKEN')
+    NGROK_AUTH_TOKEN = os.getenv('NGROK_AUTH_TOKEN')
     ngrok.set_auth_token(NGROK_AUTH_TOKEN)
     public_url = ngrok.connect(5001, bind_tls=True, domain="notably-valid-bunny.ngrok-free.app")
     print(f"\n🚀 API URL: {public_url}\n")
