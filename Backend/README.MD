@@ -1,7 +1,3 @@
-Here is a clean, professional `README.md` for your backend. It focuses on technical clarity, architecture, and deployment instructions without the use of excessive emojis or icons.
-
----
-
 # YouTube Chat Assistant - Backend API
 
 This repository contains the backend service for the YouTube to Chat Assistant application. It is built with Flask and leverages a hybrid transcription pipeline and Google Gemini AI to provide interactive, context-aware conversations based on YouTube video content.
