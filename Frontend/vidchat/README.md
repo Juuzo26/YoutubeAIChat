@@ -172,19 +172,9 @@ npm run preview
 
 ### Backend Setup
 
-The frontend requires a Flask backend server. Set up your backend with:
+Please come to our backend to read the README there
 
-1. **Ngrok URL** - Tunnel to your local Flask server
-   ```bash
-   ngrok http 5000
-   ```
-
-2. **Colab Session Cookie** - For Google Colab hosting
-   - Open your Colab notebook
-   - Inspect → Application → Cookies
-   - Copy session cookie value
-
-### Environment Variables (Optional)
+### Environment Variables
 
 Create `.env` file for default backend URL:
 
