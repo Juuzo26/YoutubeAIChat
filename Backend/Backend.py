@@ -268,7 +268,7 @@ def process_full_video():
         return jsonify({
             "video_name": scraped_title,
             "transcript": scraped_text,
-            "stats": {"duration": "Unknown (Scraped)", "proc_time": round(total_dur, 2)}
+            "stats": {"duration": info.get('duration'), "proc_time": round(total_dur, 2)}
         })
 
     # 2. FALLBACK TO WHISPER
